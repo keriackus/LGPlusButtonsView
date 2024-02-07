@@ -217,10 +217,13 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
 
             LGPlusButtonDescription *description = [LGPlusButtonDescription new];
             [wrapperView addSubview:description];
-
+            description.userInteractionEnabled = YES;
+            description.tag = i;
+           // [description addGestureRecognizer:tapGesture];
+          
             [_descriptionsArray addObject:description];
         }
-
+        [self setDescriptionsTap];
         // -----
 
         _showing = showAfterInit;
@@ -312,22 +315,46 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
     //NSLog(@"\nself = %@\nsuper = %@\nsubviews = %@\nsupersubviews = %@\n\n", self, [super hitTest:point withEvent:event], self.subviews, self.superview.subviews);
 
     UIView *view = nil;
-
-    for (LGPlusButton *button in _buttonsArray)
+    
+    for (NSUInteger i=0; i<_buttonsArray.count; i++)
     {
+        LGPlusButton *button = _buttonsArray[i];
+        WrapperView *buttonWrapperView = _buttonWrapperViewsArray1[i];
+        
+        // don't process event if button is hidden.
+        if (buttonWrapperView.alpha == 0.) {
+            continue;
+        }
         CGPoint newPoint = [self convertPoint:point toView:button];
-
+        
         view = [button hitTest:newPoint withEvent:event];
         if (view) break;
     }
-
+    
+    if(!view){
+        for (NSUInteger i=0; i<_descriptionsArray.count; i++)
+        {
+            LGPlusButtonDescription *description = _descriptionsArray[i];
+            WrapperView *descriptionWrapperView = _descriptionWrapperViewsArray[i];
+            
+            if (descriptionWrapperView.alpha == 0.) {
+                continue;
+            }
+            
+            CGPoint newPoint = [self convertPoint:point toView:description];
+            
+            view = [description hitTest:newPoint withEvent:event];
+            if (view) break;
+        }
+    }
+    
     if (!view && _coverColor && !_coverView.isHidden)
     {
         CGPoint newPoint = [self convertPoint:point toView:_coverView];
-
+        
         view = [_coverView hitTest:newPoint withEvent:event];
     }
-
+    
     return view;
 }
 
@@ -377,8 +404,7 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
 #pragma mark Buttons all
 
 - (void)setButtonsTitles:(NSArray *)titles forState:(UIControlState)state
-{
-    NSAssert(_buttonsArray.count == titles.count, kLGPlusButtonsViewAssertionWarning(@"titles"));
+{NSAssert(_buttonsArray.count == titles.count, kLGPlusButtonsViewAssertionWarning(@"titles"));
 
     for (NSUInteger i=0; i<_buttonsArray.count; i++)
         if ([titles[i] isKindOfClass:[NSString class]])
@@ -394,8 +420,7 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
 }
 
 - (void)setButtonsTitleColors:(NSArray *)titleColors forState:(UIControlState)state
-{
-    NSAssert(_buttonsArray.count == titleColors.count, kLGPlusButtonsViewAssertionWarning(@"title colors"));
+{NSAssert(_buttonsArray.count == titleColors.count, kLGPlusButtonsViewAssertionWarning(@"title colors"));
 
     for (NSUInteger i=0; i<_buttonsArray.count; i++)
         if ([titleColors[i] isKindOfClass:[UIColor class]])
@@ -736,6 +761,16 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
 }
 
 #pragma mark Descriptions all
+- (void)setDescriptionsTap
+{//xyz
+    for (NSUInteger i=0; i<_descriptionsArray.count; i++)
+    {
+        
+        [_descriptionsArray[i] setUserInteractionEnabled:true];
+        UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(descriptionAction:)];
+        [_descriptionsArray[i] addGestureRecognizer:tapGesture];
+    }
+}
 
 - (void)setDescriptionsTexts:(NSArray *)texts
 {
@@ -849,6 +884,14 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
     [_descriptionsArray[index] setTextColor:textColor];
 }
 
+- (NSString*)getDescriptionAtIndex:(NSUInteger)index
+{
+    NSAssert(_descriptionsArray.count > index, kLGPlusButtonsViewIndexAssertionWarning);
+    
+    UILabel* description = _descriptionsArray[index];
+    return description.text;
+}
+
 - (void)setDescriptionAtIndex:(NSUInteger)index backgroundColor:(UIColor *)backgroundColor
 {
     NSAssert(_descriptionsArray.count > index, kLGPlusButtonsViewIndexAssertionWarning);
@@ -922,7 +965,7 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
 {
     _position = position;
 
-    if (_position == LGPlusButtonsViewPositionBottomRight || _position == LGPlusButtonsViewPositionTopRight)
+    if (_position == LGPlusButtonsViewPositionBottomRight || _position == LGPlusButtonsViewPositionTopRight || _position == LGPlusButtonsViewPositionBottomRightOverSnack || _position == LGPlusButtonViewPositionBottomRightOverTerminal)
         _descriptionsPosition = LGPlusButtonDescriptionsPositionLeft;
     else
         _descriptionsPosition = LGPlusButtonDescriptionsPositionRight;
@@ -939,6 +982,10 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
 
 #pragma mark -
 
+  CGFloat terminalHeight = 0;
+-(void) setTerminalHeight:(CGFloat) height{
+    terminalHeight = height;
+}
 - (void)layoutSubviews
 {
     [super layoutSubviews];
@@ -959,7 +1006,7 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
         parentInset = parentScrollView.contentInset;
         parentOffset = parentScrollView.contentOffset;
     }
-
+    CGFloat snackYMargin = 25;
     // -----
 
     CGRect selfFrame = CGRectMake(parentOffset.x, parentOffset.y, self.superview.bounds.size.width, self.superview.bounds.size.height);
@@ -1007,7 +1054,13 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
 
     CGPoint buttonsContentViewOrigin = CGPointZero;
     if (_position == LGPlusButtonsViewPositionBottomRight)
-        buttonsContentViewOrigin = CGPointMake(contentViewFrame.size.width-buttonsContentViewSize.width, contentViewFrame.size.height-buttonsContentViewSize.height);
+        buttonsContentViewOrigin = CGPointMake(contentViewFrame.size.width-buttonsContentViewSize.width - 8, contentViewFrame.size.height-buttonsContentViewSize.height - 8);
+    else if(_position == LGPlusButtonsViewPositionBottomRightOverSnack){
+          buttonsContentViewOrigin = CGPointMake(contentViewFrame.size.width-buttonsContentViewSize.width - 8, contentViewFrame.size.height-buttonsContentViewSize.height - snackYMargin - 8);
+    }
+    else if(_position == LGPlusButtonViewPositionBottomRightOverTerminal){
+        buttonsContentViewOrigin = CGPointMake(contentViewFrame.size.width-buttonsContentViewSize.width - 8,  contentViewFrame.size.height-buttonsContentViewSize.height - 8 - terminalHeight - 20);
+      }
     else if (_position == LGPlusButtonsViewPositionBottomLeft)
         buttonsContentViewOrigin = CGPointMake(0.f, contentViewFrame.size.height-buttonsContentViewSize.height);
     else if (_position == LGPlusButtonsViewPositionTopRight)
@@ -1058,11 +1111,18 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
 
         if (i == 0)
         {
-            if (_position == LGPlusButtonsViewPositionBottomRight)
+            if (_position == LGPlusButtonsViewPositionBottomRight || _position == LGPlusButtonViewPositionBottomRightOverTerminal)
                 buttonFrame = CGRectMake(buttonsContentViewSize.width-buttonInsets.right-buttonSize.width,
                                          buttonsContentViewFrame.size.height-buttonInsets.bottom-buttonSize.height,
                                          buttonSize.width,
                                          buttonSize.height);
+            else if(_position == LGPlusButtonsViewPositionBottomRightOverSnack){
+                buttonFrame = CGRectMake(buttonsContentViewSize.width-buttonInsets.right-buttonSize.width,
+                                         buttonsContentViewFrame.size.height-buttonInsets.bottom-buttonSize.height - snackYMargin,
+                                         buttonSize.width,
+                                         buttonSize.height);
+
+            }
             else if (_position == LGPlusButtonsViewPositionBottomLeft)
                 buttonFrame = CGRectMake(buttonInsets.left,
                                          buttonsContentViewFrame.size.height-buttonInsets.bottom-buttonSize.height,
@@ -1083,11 +1143,17 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
         {
             CGRect previousWrapperFrame = [_buttonWrapperViewsArray1[i-1] frame];
 
-            if (_position == LGPlusButtonsViewPositionBottomRight)
+            if (_position == LGPlusButtonsViewPositionBottomRight  || _position == LGPlusButtonViewPositionBottomRightOverTerminal)
                 buttonFrame = CGRectMake(buttonsContentViewSize.width-buttonInsets.right-buttonSize.width,
                                          previousWrapperFrame.origin.y-buttonInsets.top-buttonInsets.bottom-buttonSize.height,
                                          buttonSize.width,
                                          buttonSize.height);
+            else if(_position == LGPlusButtonsViewPositionBottomRightOverSnack){
+                buttonFrame = CGRectMake(buttonsContentViewSize.width-buttonInsets.right-buttonSize.width,
+                                         previousWrapperFrame.origin.y-buttonInsets.top-buttonInsets.bottom-buttonSize.height,
+                                         buttonSize.width,
+                                         buttonSize.height);
+            }
             else if (_position == LGPlusButtonsViewPositionBottomLeft)
                 buttonFrame = CGRectMake(buttonInsets.left,
                                          previousWrapperFrame.origin.y-buttonInsets.top-buttonInsets.bottom-buttonSize.height,
@@ -1258,6 +1324,13 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
         [self hideAnimated:YES completionHandler:nil];
 }
 
+- (void)descriptionAction:(UITapGestureRecognizer *)gesture
+{
+    NSUInteger index = gesture.view.tag;
+    LGPlusButton *button = _buttonsArray[index];
+    [self buttonAction:button];
+}
+
 - (void)buttonAction:(LGPlusButton *)button
 {
     NSUInteger index = button.tag;
@@ -1273,8 +1346,11 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
     }
 
     // -----
-
-    if (_actionHandler) _actionHandler(self, button.titleLabel.text, description.text, button.tag);
+    
+    if(!button.isShowing){//workaround to avoid triggering actions while the floating menu is not presented
+        return;
+    }
+    if (_actionHandler && button.alpha == 1) _actionHandler(self, button.titleLabel.text, description.text, button.tag);
 
     if (_delegate && [_delegate respondsToSelector:@selector(plusButtonsView:buttonPressedWithTitle:description:index:)])
         [_delegate plusButtonsView:self buttonPressedWithTitle:button.titleLabel.text description:description.text index:button.tag];
@@ -1813,7 +1889,7 @@ typedef NS_ENUM(NSUInteger, LGPlusButtonDescriptionsPosition)
     }
     else if (type == LGPlusButtonsAppearingAnimationTypeCrossDissolveAndSlideVertical)
     {
-        if (_position == LGPlusButtonsViewPositionBottomLeft || _position == LGPlusButtonsViewPositionBottomRight)
+        if (_position == LGPlusButtonsViewPositionBottomLeft || _position == LGPlusButtonsViewPositionBottomRight || -_position == LGPlusButtonsViewPositionBottomRightOverSnack ||  -_position == LGPlusButtonViewPositionBottomRightOverTerminal)
             transform = CGAffineTransformConcat(transform, CGAffineTransformMakeTranslation(0.f, buttonWrapperView1.frame.size.height));
         else
             transform = CGAffineTransformConcat(transform, CGAffineTransformMakeTranslation(0.f, -buttonWrapperView1.frame.size.height));
